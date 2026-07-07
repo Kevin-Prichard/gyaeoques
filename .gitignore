@@ -10,3 +10,6 @@ wheels/
 .venv
 media/
 etc/env.sh
+
+# Editor backups
+**/*~
