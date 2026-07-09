@@ -469,10 +469,12 @@ class TTSEngine:
         tts: sherpa_onnx.OfflineTts,
         sid: int = 0,
         speed: float = 1.0,
+        device: int,
     ):
         self._tts = tts
         self._sid = sid
         self._speed = speed
+        self._device = device
         self._q: queue.Queue = queue.Queue()
         self._stop = threading.Event()
         self._thread = threading.Thread(target=self._worker, daemon=True, name="tts-worker")
@@ -521,6 +523,7 @@ class TTSEngine:
             pos[0] = end
 
         with sd.OutputStream(
+            device=self._device,
             samplerate=sample_rate,
             channels=1,
             dtype="float32",
@@ -1027,8 +1030,10 @@ def _get_args() -> argparse.Namespace:
                    help="Acoustic feature dimension (must match ASR model)")
     p.add_argument("--decoding-method", default="greedy_search",
                    choices=["greedy_search", "modified_beam_search"])
-    p.add_argument("--device", default=None, type=int,
-                   help="sounddevice input device index  (default: system default)")
+    p.add_argument("-i", "--capture-device", default=None, type=int,
+                   help="sounddevice capture device index (default: mic)")
+    p.add_argument("-o", "--output-device", default=None, type=int,
+                   help="sounddevice output device index (default: speaker)")
     p.add_argument("--debug", action="store_true",
                    help="Enable sherpa-onnx debug output")
     p.add_argument("--log-level", default="INFO",
@@ -1037,7 +1042,26 @@ def _get_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+MAXO_CHANS = "max_output_channels"
+MAXI_CHANS = "max_input_channels"
+
+def find_audio_devices(cli_capture_device, cli_output_device):
+    devices = sd.query_devices()
+    if cli_capture_device:
+        cap_dev = cli_capture_device
+    else:
+        cap_dev = [d for d in devices
+                   if d[MAXO_CHANS] == 0 and d[MAXI_CHANS] == 1][0]
+    if cli_output_device:
+        spk_dev = cli_output_device
+    else:
+        spk_dev = [d for d in devices
+                   if d[MAXO_CHANS] == 2 and d[MAXI_CHANS] == 1][0]
+    return mic_dev["index"], spk_dev.index["index"]
+
+
 SPEAKER_STORE = "./speaker_store"
+
 
 def main() -> None:
     args = _get_args()
@@ -1045,6 +1069,11 @@ def main() -> None:
         level=getattr(logging, args.log_level),
         format="%(asctime)s  %(levelname)-8s  %(name)s | %(message)s",
     )
+
+    # Determine audio devices
+    mic_dev, spk_dev = find_audio_devices(args.capture_device, args.output_device)
+    log.info("Using capture device: %s", mic_dev["name"])
+    log.info("Using output device:  %s", spk_dev["name"])
 
     log.info("Loading models …")
 
@@ -1075,7 +1104,7 @@ def main() -> None:
     # Setup TTS (optional)
     raw_tts = _build_tts(args)
     tts: "TTSEngine | _NoOpTTS" = (
-        TTSEngine(raw_tts, sid=args.tts_sid, speed=args.tts_speed)
+        TTSEngine(raw_tts, sid=args.tts_sid, speed=args.tts_speed, device=spk_dev)
         if raw_tts is not None
         else _NoOpTTS()
     )
