@@ -21,7 +21,7 @@ Usage (minimal – SenseVoice ASR + VITS-piper TTS):
       --silero-vad-model  silero_vad.onnx \\
       --speaker-model     wespeaker_en_lifespeech_eres2net_base.onnx \\
       --sense-voice       model.onnx \\
-      --tokens            tokens.txt \\
+      --sense-tokens      tokens.txt \\
       --vits-model        vits-piper-en_US-amy-low/en_US-amy-low.onnx \\
       --vits-tokens       vits-piper-en_US-amy-low/tokens.txt \\
       --vits-data-dir     vits-piper-en_US-amy-low/espeak-ng-data
@@ -755,7 +755,7 @@ def _build_vad(args) -> Tuple[sherpa_onnx.VoiceActivityDetector, int]:
 
 def _build_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
     common = dict(
-        tokens=args.tokens,
+        tokens=args.sense_tokens,
         num_threads=args.num_threads,
         debug=args.debug,
         decoding_method=args.decoding_method,
@@ -944,8 +944,8 @@ def _get_args() -> argparse.Namespace:
 
     # ASR: tokens
     p.add_argument(
-        "--tokens", default="", metavar="PATH",
-        help="Path to tokens.txt  (required for most ASR backends)",
+        "--sense-tokens", default="", metavar="PATH",
+        help="Path to voice sense tokens.txt  (required for most ASR backends)",
     )
 
     # ASR: model
