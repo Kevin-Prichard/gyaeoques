@@ -467,9 +467,9 @@ class TTSEngine:
     def __init__(
         self,
         tts: sherpa_onnx.OfflineTts,
+        device: int,
         sid: int = 0,
         speed: float = 1.0,
-        device: int,
     ):
         self._tts = tts
         self._sid = sid
