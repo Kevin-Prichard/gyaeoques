@@ -75,6 +75,8 @@ except ImportError:
         "sounddevice is not installed. Run:  pip install sounddevice"
     )
 
+import pudb
+
 # Constants
 SAMPLE_RATE = 16_000    # sherpa-onnx ASR / VAD / embedding models use 16 kHz
 READ_CHUNK_MS = 100     # audio capture granularity in milliseconds
@@ -1047,6 +1049,11 @@ MAXI_CHANS = "max_input_channels"
 
 def find_audio_devices(cli_capture_device, cli_output_device):
     devices = sd.query_devices()
+    print(devices)
+    for d in devices:
+        print(d[MAXO_CHANS], d[MAXI_CHANS])
+    sys.stdin.readline()
+    pu.db
     if cli_capture_device:
         cap_dev = cli_capture_device
     else:
@@ -1057,7 +1064,7 @@ def find_audio_devices(cli_capture_device, cli_output_device):
     else:
         spk_dev = [d for d in devices
                    if d[MAXO_CHANS] == 2 and d[MAXI_CHANS] == 1][0]
-    return mic_dev["index"], spk_dev.index["index"]
+    return cap_dev["index"], spk_dev["index"]
 
 
 SPEAKER_STORE = "./speaker_store"
@@ -1119,7 +1126,7 @@ def main() -> None:
     _attach_console_handlers(bus, registry)
 
     # Audio capture
-    capture = AudioCapture(device=args.device)
+    capture = AudioCapture(device=cap_dev)
 
     # Create and start pipeline
     pipeline = ConversatorPipeline(
