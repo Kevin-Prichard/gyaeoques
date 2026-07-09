@@ -1078,8 +1078,8 @@ def main() -> None:
     )
 
     # Determine audio devices
-    mic_dev, spk_dev = find_audio_devices(args.capture_device, args.output_device)
-    log.info("Using capture device: %s", mic_dev["name"])
+    cap_dev, spk_dev = find_audio_devices(args.capture_device, args.output_device)
+    log.info("Using capture device: %s", cap_dev["name"])
     log.info("Using output device:  %s", spk_dev["name"])
 
     log.info("Loading models …")
