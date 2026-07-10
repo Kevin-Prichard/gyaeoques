@@ -79,7 +79,7 @@ except ImportError:
 import pudb
 
 # Constants
-SAMPLE_RATE = 16_000    # sherpa-onnx ASR / VAD / embedding models use 16 kHz
+SAMPLE_RATE = 24_000    # sherpa-onnx ASR / VAD / embedding models use 16 kHz
 READ_CHUNK_MS = 100     # audio capture granularity in milliseconds
 READ_CHUNK_SAMPLES = int(SAMPLE_RATE * READ_CHUNK_MS / 1000)
 MIN_SPEECH_SAMPLES = int(0.5 * SAMPLE_RATE)  # discard segments shorter than 0.5 s
@@ -1050,11 +1050,6 @@ MAXI_CHANS = "max_input_channels"
 
 def find_audio_devices(cli_capture_device, cli_output_device):
     devices = sd.query_devices()
-    print(devices)
-    for d in devices:
-        print(d[MAXO_CHANS], d[MAXI_CHANS])
-    sys.stdin.readline()
-    pu.db
     if cli_capture_device:
         cap_dev = cli_capture_device
     else:
