@@ -82,8 +82,8 @@ import pudb
 # Constants
 SAMPLE_RATE = 24_000    # sherpa-onnx ASR / VAD / embedding models use 16 kHz
 READ_CHUNK_MS = 100     # audio capture granularity in milliseconds
-READ_CHUNK_SAMPLES = lambda(sample_rate): int(sample_rate * READ_CHUNK_MS / 1000)
-MIN_SPEECH_SAMPLES = lambda(sample_rate): int(0.5 * sample_rate)  # discard segments shorter than 0.5 s
+READ_CHUNK_SAMPLES = lambda sample_rate: int(sample_rate * READ_CHUNK_MS / 1000)
+MIN_SPEECH_SAMPLES = lambda sample_rate: int(0.5 * sample_rate)  # discard segments shorter than 0.5 s
 UNKNOWN_SPEAKER_LABEL = "unknown"
 
 log = logging.getLogger("pipeline")
@@ -754,7 +754,7 @@ def _build_vad(args) -> Tuple[sherpa_onnx.VoiceActivityDetector, int]:
     cfg.silero_vad.min_silence_duration = args.min_silence_duration
     cfg.silero_vad.min_speech_duration = args.min_speech_duration
     cfg.silero_vad.threshold = args.vad_threshold
-    cfg.sample_rate = args._sample_rate
+    cfg.sample_rate = args.sample_rate
     if not cfg.validate():
         raise ValueError(f"Invalid VAD config: {cfg}")
     window_size = cfg.silero_vad.window_size
@@ -1127,7 +1127,7 @@ def main() -> None:
     # Setup speech enhancer (optional)
     enhancer = SpeechEnhancer(args.denoise_model,
                               args.num_threads,
-                              sample_rate=self._sample_rate)\
+                              sample_rate=args.sample_rate)\
         if args.denoise_model else None
 
     # Start event bus
