@@ -13,6 +13,7 @@ dependencies = [
     "pudb>=2025.1.5",
     "pykokoro>=0.6.5",
     "sherpa-onnx>=1.13.3",
+    "sounddevice>=0.5.5",
     "soundfile>=0.14.0",
     "sqlalchemy>=2.0.51",
     # pykokoro requires Python >=3.11 (onnxruntime constraint).
