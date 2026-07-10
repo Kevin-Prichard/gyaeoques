@@ -1120,7 +1120,7 @@ def main() -> None:
         log.info("No TTS model specified - TTS disabled.")
 
     # Setup speech enhancer (optional)
-    enhancer = SpeechEnhancer(args.denoise_model, args.num_threads) if args.gtcrn_model else None
+    enhancer = SpeechEnhancer(args.denoise_model, args.num_threads) if args.denoise_model else None
 
     # Start event bus
     bus = EventBus()
