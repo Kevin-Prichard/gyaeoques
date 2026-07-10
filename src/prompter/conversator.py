@@ -207,7 +207,7 @@ class AudioCapture:
                     samplerate=sr,
                     channels=1,
                     dtype="float32",
-                    blocksize=READ_CHUNK_SAMPLES(self._sample_rate),
+                    blocksize=READ_CHUNK_SAMPLES(sr),
                     device=self._device,
                     callback=self._callback,
                 )
