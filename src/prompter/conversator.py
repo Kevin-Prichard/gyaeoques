@@ -213,7 +213,7 @@ class AudioCapture:
                 )
             except Exception as e:
                 log.warning("Failed to open InputStream at %d Hz: %s", self._sample_rate, e)
-                continue
+                import traceback; traceback.print_exc()
         if not self._stream:
             raise RuntimeError(f"Could not open audio input stream at any sample rate")
         log.warning("Starting audio capture at %d Hz, blocksize=%d samples",
