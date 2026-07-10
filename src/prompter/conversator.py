@@ -25,6 +25,7 @@ Usage (minimal – SenseVoice ASR + VITS-piper TTS):
       --vits-model        vits-piper-en_US-amy-low/en_US-amy-low.onnx \\
       --vits-tokens       vits-piper-en_US-amy-low/tokens.txt \\
       --vits-data-dir     vits-piper-en_US-amy-low/espeak-ng-data
+      --sample-rate       24000
 
 Model downloads handled in prepare-conversator.sh; it includes required model
 downloads:
@@ -81,8 +82,8 @@ import pudb
 # Constants
 SAMPLE_RATE = 24_000    # sherpa-onnx ASR / VAD / embedding models use 16 kHz
 READ_CHUNK_MS = 100     # audio capture granularity in milliseconds
-READ_CHUNK_SAMPLES = int(SAMPLE_RATE * READ_CHUNK_MS / 1000)
-MIN_SPEECH_SAMPLES = int(0.5 * SAMPLE_RATE)  # discard segments shorter than 0.5 s
+READ_CHUNK_SAMPLES = lambda(sample_rate): int(sample_rate * READ_CHUNK_MS / 1000)
+MIN_SPEECH_SAMPLES = lambda(sample_rate): int(0.5 * sample_rate)  # discard segments shorter than 0.5 s
 UNKNOWN_SPEAKER_LABEL = "unknown"
 
 log = logging.getLogger("pipeline")
@@ -187,11 +188,12 @@ class AudioCapture:
     Each queue item is a tuple (samples: np.ndarray, start_sample: int).
     """
 
-    def __init__(self, device: Optional[int] = None):
+    def __init__(self, device: Optional[int] = None, sample_rate: int = SAMPLE_RATE):
         self._device = device
         self._q: queue.Queue = queue.Queue(maxsize=200)
         self._total_samples = 0
         self._stream: Optional[sd.InputStream] = None
+        self._sample_rate = sample_rate
 
     def start(self) -> None:
         devices = sd.query_devices()
@@ -200,10 +202,10 @@ class AudioCapture:
         idx = self._device if self._device is not None else sd.default.device[0]
         log.info("AudioCapture: using device %s – %s", idx, devices[idx]["name"])
         self._stream = sd.InputStream(
-            samplerate=SAMPLE_RATE,
+            samplerate=self._sample_rate,
             channels=1,
             dtype="float32",
-            blocksize=READ_CHUNK_SAMPLES,
+            blocksize=READ_CHUNK_SAMPLES(self._sample_rate),
             device=self._device,
             callback=self._callback,
         )
@@ -246,7 +248,8 @@ class SpeechEnhancer:
     original samples are returned unchanged so the pipeline is not stalled.
     """
 
-    def __init__(self, model_path: str, num_threads: int = 1):
+    def __init__(self, model_path: str, num_threads: int = 1, sample_rate=SAMPLE_RATE):
+        self._sample_rate = sample_rate
         config = sherpa_onnx.OnlineSpeechDenoiserConfig(
             model=sherpa_onnx.OfflineSpeechDenoiserModelConfig(
                 gtcrn=sherpa_onnx.OfflineSpeechDenoiserGtcrnModelConfig(
@@ -275,7 +278,7 @@ class SpeechEnhancer:
         while len(self._raw_buf) >= self._frame_shift:
             chunk = self._raw_buf[: self._frame_shift]
             self._raw_buf = self._raw_buf[self._frame_shift :]
-            result = self._denoiser(chunk, SAMPLE_RATE)
+            result = self._denoiser(chunk, self._sample_rate)
             self._enhanced_buf = np.concatenate(
                 [self._enhanced_buf, np.asarray(result.samples, dtype=np.float32)]
             )
@@ -401,7 +404,9 @@ class SpeakerRegistry:
     # ---- identification -----------------------------------------------------
 
     def identify(
-        self, samples: np.ndarray, sample_rate: int = SAMPLE_RATE
+        self,
+        samples: np.ndarray,
+        sample_rate: int = SAMPLE_RATE
     ) -> Tuple[str, bool, str]:
         """
         Identify the speaker in *samples*.
@@ -599,6 +604,7 @@ class ConversatorPipeline:
         asr: ASREngine,
         tts: "TTSEngine | _NoOpTTS",
         enhancer: Optional[SpeechEnhancer] = None,
+        sample_rate: int = SAMPLE_RATE,
     ):
         self._bus = bus
         self._capture = capture
@@ -609,6 +615,7 @@ class ConversatorPipeline:
         self._tts = tts
         self._enhancer = enhancer
         self._session = SessionAccumulator()
+        self._sample_rate = sample_rate
 
         # Running counters
         self._total_samples: int = 0   # samples consumed from mic (absolute)
@@ -657,7 +664,7 @@ class ConversatorPipeline:
         while not self._vad.empty():
             seg_samples = np.asarray(self._vad.front.samples, dtype=np.float32)
             self._vad.pop()
-            if len(seg_samples) < MIN_SPEECH_SAMPLES:
+            if len(seg_samples) < MIN_SPEECH_SAMPLES(self._sample_rate):
                 log.debug("Skipping short segment (%d samples)", len(seg_samples))
                 continue
             self._process_segment(seg_samples)
@@ -668,7 +675,7 @@ class ConversatorPipeline:
         SpeakingStarted -> SpeakerDetected -> SpeakingEnded ->
         TranscriptReady -> SpeakingFinished -> TTS echo
         """
-        duration_s = len(samples) / SAMPLE_RATE
+        duration_s = len(samples) / self._sample_rate
         # Approximate segment start position (segment ends at total_samples)
         start_sample = self._total_samples - len(samples)
         end_sample = self._total_samples
@@ -747,7 +754,7 @@ def _build_vad(args) -> Tuple[sherpa_onnx.VoiceActivityDetector, int]:
     cfg.silero_vad.min_silence_duration = args.min_silence_duration
     cfg.silero_vad.min_speech_duration = args.min_speech_duration
     cfg.silero_vad.threshold = args.vad_threshold
-    cfg.sample_rate = SAMPLE_RATE
+    cfg.sample_rate = args._sample_rate
     if not cfg.validate():
         raise ValueError(f"Invalid VAD config: {cfg}")
     window_size = cfg.silero_vad.window_size
@@ -772,7 +779,7 @@ def _build_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
         log.info("ASR: Paraformer  %s", args.paraformer)
         return sherpa_onnx.OfflineRecognizer.from_paraformer(
             paraformer=args.paraformer,
-            sample_rate=SAMPLE_RATE,
+            sample_rate=args.sample_rate,
             feature_dim=args.feature_dim,
             **common,
         )
@@ -792,7 +799,7 @@ def _build_recognizer(args) -> sherpa_onnx.OfflineRecognizer:
             encoder=args.encoder,
             decoder=args.decoder,
             joiner=args.joiner,
-            sample_rate=SAMPLE_RATE,
+            sample_rate=args.sample_rate,
             feature_dim=args.feature_dim,
             **common,
         )
@@ -1033,6 +1040,9 @@ def _get_args() -> argparse.Namespace:
                    help="Acoustic feature dimension (must match ASR model)")
     p.add_argument("--decoding-method", default="greedy_search",
                    choices=["greedy_search", "modified_beam_search"])
+    # sample-rate
+    p.add_argument("--sample-rate", default=SAMPLE_RATE, type=int,
+                     help="Audio sample rate (must match ASR model)")
     p.add_argument("-i", "--capture-device", default=None, type=int,
                    help="sounddevice capture device index (default: mic)")
     p.add_argument("-o", "--output-device", default=None, type=int,
@@ -1115,14 +1125,17 @@ def main() -> None:
         log.info("No TTS model specified - TTS disabled.")
 
     # Setup speech enhancer (optional)
-    enhancer = SpeechEnhancer(args.denoise_model, args.num_threads) if args.denoise_model else None
+    enhancer = SpeechEnhancer(args.denoise_model,
+                              args.num_threads,
+                              sample_rate=self._sample_rate)\
+        if args.denoise_model else None
 
     # Start event bus
     bus = EventBus()
     _attach_console_handlers(bus, registry)
 
     # Audio capture
-    capture = AudioCapture(device=cap_dev)
+    capture = AudioCapture(device=cap_dev, sample_rate=args.sample_rate)
 
     # Create and start pipeline
     pipeline = ConversatorPipeline(
@@ -1134,6 +1147,7 @@ def main() -> None:
         asr=asr,
         tts=tts,
         enhancer=enhancer,
+        sample_rate=args.sample_rate
     )
 
     log.info("All models ready.  Starting pipeline …")
