@@ -201,14 +201,24 @@ class AudioCapture:
             raise RuntimeError("No audio input devices found")
         idx = self._device if self._device is not None else sd.default.device[0]
         log.info("AudioCapture: using device %s – %s", idx, devices[idx]["name"])
-        self._stream = sd.InputStream(
-            samplerate=self._sample_rate,
-            channels=1,
-            dtype="float32",
-            blocksize=READ_CHUNK_SAMPLES(self._sample_rate),
-            device=self._device,
-            callback=self._callback,
-        )
+        for sr in (8000, 9600, 11025, 12000, 16000, 22050, 24000, 32000, 44100, 48000, 88200, 96000, 192000):
+            try:
+                self._stream = sd.InputStream(
+                    samplerate=sr,
+                    channels=1,
+                    dtype="float32",
+                    blocksize=READ_CHUNK_SAMPLES(self._sample_rate),
+                    device=self._device,
+                    callback=self._callback,
+                )
+            except Exception as e:
+                log.warning("Failed to open InputStream at %d Hz: %s", self._sample_rate, e)
+                continue
+        if not self._stream:
+            raise RuntimeError(f"Could not open audio input stream at any sample rate")
+        log.warning("Starting audio capture at %d Hz, blocksize=%d samples",
+                    self._sample_rate,
+                    READ_CHUNK_SAMPLES(self._sample_rate))
         self._stream.start()
 
     def stop(self) -> None:
